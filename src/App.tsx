@@ -1284,13 +1284,13 @@ function rankBallot(category: Category, athletes: Athlete[], ballot: Ballot | un
   return rows;
 }
 
-function consolidatedCategoryWinner(category: Category, athletes: Athlete[], ballots: Ballot[], placements: Placement[], abstentions: Abstention[]) {
+function consolidatedCategoryQualifiers(category: Category, athletes: Athlete[], ballots: Ballot[], placements: Placement[], abstentions: Abstention[]) {
   const participants = athletes.filter((athlete) => athlete.active && athlete.registration_status !== "withdrawn" && athleteInCategory(athlete, category.id));
   const validBallots = ballots.filter((ballot) => ballot.category_id === category.id
     && ballot.status === "submitted"
     && ballot.included_in_results !== false
     && !abstentions.some((entry) => entry.category_id === category.id && entry.judge_id === ballot.judge_id));
-  if (!participants.length || !validBallots.length) return undefined;
+  if (!participants.length || !validBallots.length) return [] as Athlete[];
   return participants.map((athlete) => {
     const roundTotals = category.rounds.map((round) => ({
       key: round.key,
@@ -1299,7 +1299,9 @@ function consolidatedCategoryWinner(category: Category, athletes: Athlete[], bal
     const total = roundTotals.reduce((sum, round) => sum + round.total, 0);
     const tieValue = roundTotals.find((round) => round.key === category.tie_break_round)?.total ?? total;
     return { athlete, total, tieValue };
-  }).sort((a, b) => a.total - b.total || a.tieValue - b.tieValue || (a.athlete.bib ?? 9999) - (b.athlete.bib ?? 9999))[0]?.athlete;
+  }).sort((a, b) => a.total - b.total || a.tieValue - b.tieValue || (a.athlete.bib ?? 9999) - (b.athlete.bib ?? 9999))
+    .slice(0, 2)
+    .map((row) => row.athlete);
 }
 
 async function ensureAbsoluteCategory(competitionId: string, categories: Category[], spec: typeof absoluteCategorySpecs[number]) {
@@ -1359,14 +1361,14 @@ async function syncAbsoluteQualifier({ competitionId, sourceCategory, categories
   const absoluteCategory = prepared.categories.find((category) => absoluteSpecForCategory(category)?.name === spec.name);
   if (!absoluteCategory) return { handled: true, error: `No se pudo preparar ${spec.name}.`, message: "" };
   const allCategories = prepared.categories;
-  const winner = removeOnly ? undefined : consolidatedCategoryWinner(sourceCategory, athletes, ballots, placements, abstentions);
+  const qualifiers = removeOnly ? [] : consolidatedCategoryQualifiers(sourceCategory, athletes, ballots, placements, abstentions);
   let rosterChanged = false;
 
   for (const athlete of athletes) {
     const registration = athleteRegistration(athlete);
     const currentSources = registration.absoluteQualifications[absoluteCategory.id] ?? [];
     const nextSources = currentSources.filter((sourceId) => sourceId !== sourceCategory.id);
-    if (winner?.id === athlete.id) nextSources.push(sourceCategory.id);
+    if (qualifiers.some((qualifier) => qualifier.id === athlete.id)) nextSources.push(sourceCategory.id);
     const uniqueSources = [...new Set(nextSources)];
     const sourceChanged = currentSources.length !== uniqueSources.length || currentSources.some((sourceId) => !uniqueSources.includes(sourceId));
     if (!sourceChanged) continue;
@@ -1379,7 +1381,7 @@ async function syncAbsoluteQualifier({ competitionId, sourceCategory, categories
     if (uniqueSources.length) {
       absoluteQualifications[absoluteCategory.id] = uniqueSources;
       const sourceNames = uniqueSources.map((sourceId) => allCategories.find((category) => category.id === sourceId)?.name).filter((name): name is string => Boolean(name));
-      subcategories[absoluteCategory.id] = `Campeón: ${sourceNames.join(" · ")}`;
+      subcategories[absoluteCategory.id] = `Clasificado: ${sourceNames.join(" · ")}`;
     } else {
       delete absoluteQualifications[absoluteCategory.id];
       delete subcategories[absoluteCategory.id];
@@ -1396,12 +1398,14 @@ async function syncAbsoluteQualifier({ competitionId, sourceCategory, categories
     const resetError = await resetAbsoluteBallots(absoluteCategory);
     if (resetError) return { handled: true, error: `Los clasificados se actualizaron, pero no se pudo reiniciar ${absoluteCategory.name}: ${resetError}`, message: "" };
   }
-  if (removeOnly) return { handled: true, message: rosterChanged ? `${sourceCategory.name} fue retirada temporalmente de ${absoluteCategory.name} hasta confirmar nuevamente su campeón.` : "" };
+  if (removeOnly) return { handled: true, message: rosterChanged ? `${sourceCategory.name} fue retirada temporalmente de ${absoluteCategory.name} hasta confirmar nuevamente sus clasificados.` : "" };
   return {
     handled: true,
-    message: winner
-      ? `${winner.name} clasificó automáticamente a ${absoluteCategory.name} como campeón de ${sourceCategory.name}.`
-      : `${sourceCategory.name} se cerró sin papeletas válidas; no se asignó clasificado a ${absoluteCategory.name}.`,
+    message: qualifiers.length
+      ? qualifiers.length === 1
+        ? `El primer lugar de ${sourceCategory.name} clasificó automáticamente a ${absoluteCategory.name}: ${qualifiers[0].name}.`
+        : `Los primeros dos lugares de ${sourceCategory.name} clasificaron automáticamente a ${absoluteCategory.name}: ${qualifiers.map((athlete) => athlete.name).join(" y ")}.`
+      : `${sourceCategory.name} se cerró sin papeletas válidas; no se asignaron clasificados a ${absoluteCategory.name}.`,
   };
 }
 
