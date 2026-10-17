@@ -2036,6 +2036,8 @@ function AthleteEditor({ athlete, categories, refresh, setMessage }: { athlete: 
     }));
   }
 
+  const wnbfLinked = Boolean(athlete.wnbf_athlete_id || athleteRegistration(athlete).external?.athleteId);
+
   async function save() {
     const registration = athleteRegistration(athlete);
     const modalityKeys = [...new Set(form.modalityKeys)].filter((key) => Boolean(scoringPresets[key]));
@@ -2048,7 +2050,7 @@ function AthleteEditor({ athlete, categories, refresh, setMessage }: { athlete: 
     const updated = await supabase.from("athletes").update({
       name: form.name.trim(),
       registered_division: encodeAthleteRegistration(categoryIds, subcategories, registration.legacyDivision, modalityKeys, registration.absoluteQualifications, form.gender, registration.external),
-      bib: form.bib ? Number(form.bib) : null,
+      bib: wnbfLinked ? athlete.bib : form.bib ? Number(form.bib) : null,
       category_id: categoryIds[0] || null,
       registration_status: form.status,
       active: form.status !== "withdrawn",
@@ -2076,7 +2078,7 @@ function AthleteEditor({ athlete, categories, refresh, setMessage }: { athlete: 
   const selectedModalities = Object.entries(scoringPresets).filter(([key]) => form.modalityKeys.includes(key));
   return <div className="athlete-editor athlete-master-editor">
     <label className="athlete-master-name"><span>Atleta</span><span className="athlete-name-with-dorsal"><DorsalBadge athlete={athlete} /><input aria-label="Nombre" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></span></label>
-    <label className="athlete-master-bib"><span>Dorsal</span><input aria-label="Dorsal" type="number" min="1" value={form.bib} onChange={(e) => setForm({ ...form, bib: e.target.value })} placeholder={athleteRegistration(athlete).external?.dorsalStatus === "pendiente" ? "Pendiente" : "S/N"} /></label>
+    <label className={`athlete-master-bib ${wnbfLinked ? "wnbf-dorsal-locked" : ""}`}><span>Dorsal</span>{wnbfLinked ? <><input aria-label="Dorsal asignado por WNBF, bloqueado" type="text" value={athleteDorsalText(athlete)} disabled title="Dorsal asignado por WNBF México; no se puede modificar aquí." /><small>Asignado por WNBF · bloqueado</small></> : <input aria-label="Dorsal" type="number" min="1" value={form.bib} onChange={(e) => setForm({ ...form, bib: e.target.value })} placeholder="Dorsal" />}</label>
     <label className="athlete-master-gender"><span>Sexo</span><select aria-label="Sexo" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as AthleteGender })}><option value="">Seleccionar</option><option value="women">Mujer</option><option value="men">Hombre</option></select></label>
     <details className="athlete-category-picker">
       <summary><span><strong>Modalidades</strong><small>{selectedModalities.length ? `${selectedModalities.length} seleccionada${selectedModalities.length === 1 ? "" : "s"}` : "Pendiente de asignar"}</small></span><span className="category-picker-count">{selectedModalities.length}</span></summary>

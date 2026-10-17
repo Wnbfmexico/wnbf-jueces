@@ -563,3 +563,5 @@ th{background:#111315}
 .category-athlete-identity>strong.athlete-name-with-dorsal{display:inline-flex;align-items:center;gap:9px;overflow:visible;white-space:normal}
 @media(max-width:900px){.score-card>header{grid-template-columns:68px minmax(0,1fr)}}
 @media(max-width:520px){.score-card>header{grid-template-columns:58px minmax(0,1fr);gap:8px}}
+
+.athlete-master-bib.wnbf-dorsal-locked input:disabled{background:#f4f4f5;border-color:#d4d4d8;color:#27272a;font-weight:850;opacity:1;cursor:not-allowed}.athlete-master-bib.wnbf-dorsal-locked>small{font-size:9px;line-height:1.15;color:#71717a}
