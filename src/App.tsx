@@ -298,8 +298,8 @@ function applyScoringPreset(category: Category): Category {
 }
 
 const eventCategoryItinerary = [
-  "Bodybuilding Novice",
   "Men's Physique Novice",
+  "Bodybuilding Novice",
   "Bikini Short",
   "Bikini Tall",
   "Figure Open",
