@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
 
   const [categoryResult, athleteResult] = await Promise.all([
     service.from("categories").select("id,name,division,is_test").eq("competition_id", input.competition_id),
-    service.from("athletes").select("id,name,bib,category_id,registered_division,wnbf_athlete_id,active,registration_status,height_cm,weight_kg,measured_by,measures_complete,external_updated_at").eq("competition_id", input.competition_id),
+    service.from("athletes").select("id,name,bib,dorsal,category_id,registered_division,wnbf_athlete_id,active,registration_status,height_cm,weight_kg,measured_by,measures_complete,external_updated_at").eq("competition_id", input.competition_id),
   ]);
   if (categoryResult.error || athleteResult.error) {
     return json({ error: categoryResult.error?.message || athleteResult.error?.message }, 500);
@@ -131,7 +131,8 @@ Deno.serve(async (req) => {
     ];
     const subcategories = Object.fromEntries(Object.entries(previous.subcategories).filter(([id]) => !oldImportedIds.has(id)));
     Object.assign(subcategories, matched.subcategories);
-    const dorsal = integerOrNull(external.dorsal);
+    const dorsal = stringOrNull(external.dorsal);
+    const dorsalNumber = dorsal ? integerOrNull(dorsal.replace(/[^0-9]/g, "")) : null;
     const directHeight = numberOrNull(external.estatura_cm);
     const heightMetres = numberOrNull(external.estatura_m);
     const heightCm = directHeight ?? (heightMetres === null ? null : Math.round(heightMetres * 100));
@@ -145,7 +146,7 @@ Deno.serve(async (req) => {
       external: {
         source: "wnbf_mexico" as const,
         athleteId: externalId,
-        dorsalStatus: external.dorsal_estado === "asignado" && dorsal !== null ? "asignado" as const : "pendiente" as const,
+        dorsalStatus: external.dorsal_estado === "asignado" && dorsal ? "asignado" as const : "pendiente" as const,
         finalCategory: String(external.categoria_final ?? ""),
         registeredCategories: stringArray(external.categorias_inscritas),
         cutDivision: String(external.division_corte ?? ""),
@@ -164,7 +165,8 @@ Deno.serve(async (req) => {
       category_id: meta.categoryIds[0] ?? null,
       wnbf_athlete_id: externalId,
       name,
-      bib: dorsal,
+      bib: dorsalNumber,
+      dorsal,
       height_cm: heightCm,
       weight_kg: numberOrNull(external.peso_kg),
       measured_by: typeof external.medido_por === "string" && external.medido_por.trim() ? external.medido_por.trim() : null,
@@ -220,7 +222,7 @@ Deno.serve(async (req) => {
   if (stateSaved.error) return json({ error: stateSaved.error.message }, 500);
 
   const changed = changedIds.size
-    ? await service.from("athletes").select("id,competition_id,category_id,bib,name,active,registered_division,height_cm,weight_kg,registration_status,wnbf_athlete_id,measured_by,measures_complete,external_updated_at").in("id", [...changedIds])
+    ? await service.from("athletes").select("id,competition_id,category_id,bib,dorsal,name,active,registered_division,height_cm,weight_kg,registration_status,wnbf_athlete_id,measured_by,measures_complete,external_updated_at").in("id", [...changedIds])
     : { data: [], error: null };
   if (changed.error) errors.push(changed.error.message);
   return json({
@@ -244,6 +246,12 @@ function numberOrNull(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function stringOrNull(value: unknown) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
 }
 
 function integerOrNull(value: unknown) {

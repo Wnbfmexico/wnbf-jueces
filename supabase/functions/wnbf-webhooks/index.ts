@@ -111,7 +111,7 @@ async function queueMeasurements(
   if (hasWeight) update.weight_kg = weight;
   if (hasHeight) update.height_cm = height;
   const saved = await service.from("athletes").update(update).eq("id", athlete.id)
-    .select("id,competition_id,category_id,bib,name,active,registered_division,height_cm,weight_kg,registration_status,wnbf_athlete_id,measured_by,measures_complete,external_updated_at")
+    .select("id,competition_id,category_id,bib,dorsal,name,active,registered_division,height_cm,weight_kg,registration_status,wnbf_athlete_id,measured_by,measures_complete,external_updated_at")
     .single();
   if (saved.error) return { error: saved.error.message, status: 500, ids: [] as string[], athlete: null };
 
@@ -157,7 +157,7 @@ async function queueBallot(service: SupabaseClient, ballotId: string, userId: st
   const category = categoryResult.data;
   if (!category || categoryResult.error) return { error: "Categoría no encontrada", status: 404, ids: [] as string[] };
   if (category.is_test) return { error: "Las simulaciones no se envían a WNBF", status: 400, ids: [] as string[] };
-  const athletesResult = await service.from("athletes").select("id,name,bib,registered_division,active,registration_status").eq("competition_id", category.competition_id);
+  const athletesResult = await service.from("athletes").select("id,name,bib,dorsal,registered_division,active,registration_status").eq("competition_id", category.competition_id);
   if (athletesResult.error || placementResult.error || feedbackResult.error) return { error: athletesResult.error?.message || placementResult.error?.message || feedbackResult.error?.message, status: 500, ids: [] as string[] };
 
   const athletes = (athletesResult.data ?? []).filter((athlete) => athlete.active && athlete.registration_status !== "withdrawn" && parseRegistration(athlete.registered_division).categoryIds.includes(category.id));
@@ -180,7 +180,7 @@ async function queueBallot(service: SupabaseClient, ballotId: string, userId: st
       tipo_evento: "papeleta_enviada",
       competencia_id: WNBF_COMPETITION_ID,
       atleta_id_wnbf: registration.external.athleteId,
-      dorsal: rankedAthlete.athlete.bib ?? null,
+      dorsal: rankedAthlete.athlete.dorsal ?? null,
       categoria_final: registration.external.finalCategory || category.division,
       juez: judgeName,
       criterios: criteria,
@@ -210,7 +210,7 @@ async function queueResult(service: SupabaseClient, categoryId: string) {
   if (category.is_test) return { error: "Las simulaciones no se envían a WNBF", status: 400, ids: [] as string[] };
 
   const [athletesResult, ballotsResult, abstentionsResult, auditResult] = await Promise.all([
-    service.from("athletes").select("id,name,bib,registered_division,active,registration_status").eq("competition_id", category.competition_id),
+    service.from("athletes").select("id,name,bib,dorsal,registered_division,active,registration_status").eq("competition_id", category.competition_id),
     service.from("ballots").select("id,judge_id,status,included_in_results").eq("category_id", category.id).eq("status", "submitted").eq("included_in_results", true),
     service.from("judge_abstentions").select("judge_id").eq("category_id", category.id),
     service.from("ballot_audit_log").select("created_at").eq("category_id", category.id).eq("action", "category_closed").order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -245,7 +245,7 @@ async function queueResult(service: SupabaseClient, categoryId: string) {
         tipo_evento: "resultado_confirmado",
         competencia_id: WNBF_COMPETITION_ID,
         atleta_id_wnbf: registration.external.athleteId,
-        dorsal: rankedAthlete.athlete.bib ?? null,
+        dorsal: rankedAthlete.athlete.dorsal ?? null,
         categoria_final: registration.external.finalCategory || category.division,
         lugar_final: index + 1,
         confirmado_at: mazatlanIso(confirmedAt),
