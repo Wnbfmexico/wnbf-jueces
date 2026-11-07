@@ -465,6 +465,7 @@ function categoryTiming(category: Category, auditLog: AuditEntry[], now: number)
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checking, setChecking] = useState(true);
+  const [startupWarning, setStartupWarning] = useState("");
   const [passwordRecovery, setPasswordRecovery] = useState(() => {
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const search = new URLSearchParams(window.location.search);
@@ -472,15 +473,35 @@ export default function App() {
   });
 
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    let mounted = true;
+    const timeout = window.setTimeout(() => {
+      if (!mounted) return;
+      setStartupWarning("La verificación de acceso tardó demasiado. Inicia sesión para continuar.");
       setChecking(false);
-    });
+    }, 10000);
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === "PASSWORD_RECOVERY") setPasswordRecovery(true);
+      setStartupWarning("");
       setSession(next);
     });
-    return () => data.subscription.unsubscribe();
+    void supabase.auth.getSession().then(({ data: sessionData, error }) => {
+      if (!mounted) return;
+      window.clearTimeout(timeout);
+      setSession(sessionData.session);
+      setStartupWarning(error ? "No se pudo verificar la sesión guardada. Inicia sesión nuevamente." : "");
+      setChecking(false);
+    }).catch(() => {
+      if (!mounted) return;
+      window.clearTimeout(timeout);
+      setSession(null);
+      setStartupWarning("No se pudo verificar la sesión guardada. Comprueba tu conexión e inicia sesión nuevamente.");
+      setChecking(false);
+    });
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   if (!isConfigured) return <SetupNotice />;
@@ -489,7 +510,7 @@ export default function App() {
     window.history.replaceState({}, "", `${window.location.origin}${import.meta.env.BASE_URL}`);
     setPasswordRecovery(false);
   }} />;
-  if (!session) return <Access />;
+  if (!session) return <Access startupWarning={startupWarning} />;
   return <Panel session={session} />;
 }
 
@@ -501,13 +522,13 @@ function Loading() {
   return <div className="center-page"><div className="spinner" /><p>Verificando acceso…</p></div>;
 }
 
-function Access() {
+function Access({ startupWarning = "" }: { startupWarning?: string }) {
   const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState(startupWarning);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
